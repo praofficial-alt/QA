@@ -1,0 +1,86 @@
+# QA pipeline for https://github.com/praofficial-alt/QA
+# Trigger: push/PR to main, or manual run.
+
+name: QA Pipeline
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: "Override QA base URL (optional)"
+        required: false
+        default: ""
+
+concurrency:
+  group: qa-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: "3.12"
+  NODE_VERSION: "20"
+
+jobs:
+  qa:
+    name: API (Newman) + UI (Playwright)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Setup Node (Newman / Postman)
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Install Playwright browsers
+        run: python -m playwright install --with-deps chromium
+
+      - name: Prepare report folder
+        run: mkdir -p reports
+
+      # Manual run: set workflow input base_url. Otherwise: repo variable QA_BASE_URL, else example.com
+      - name: Run pytest (UI / integration)
+        env:
+          BASE_URL: ${{ github.event.inputs && github.event.inputs.base_url != '' && github.event.inputs.base_url || vars.QA_BASE_URL || 'https://example.com' }}
+        run: |
+          python -m pytest tests/ -v --tb=short --junitxml=reports/junit-pytest.xml
+
+      - name: Run Postman collection (Newman)
+        if: ${{ hashFiles('postman/collection.json') != '' }}
+        env:
+          BASE_URL: ${{ github.event.inputs && github.event.inputs.base_url != '' && github.event.inputs.base_url || vars.QA_BASE_URL || 'https://example.com' }}
+        run: |
+          npx --yes newman run postman/collection.json \
+            --reporters cli,junit \
+            --reporter-junit-export reports/junit-newman.xml \
+            --env-var "baseUrl=$BASE_URL"
+
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qa-reports-${{ github.run_id }}
+          path: |
+            reports/
+          if-no-files-found: ignore
+
+      # Optional: add steps here for Allure, Excel, Jira, Slack (secrets required)
