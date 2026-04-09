@@ -39,12 +39,18 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: pip
-          cache-dependency-path: requirements.txt
+          cache-dependency-path: |
+            requirements.txt
+            pytest.ini
+            playwright.config.py
 
       - name: Setup Node (Newman / Postman)
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install Newman (global)
+        run: npm install -g newman
 
       - name: Install Python dependencies
         run: |
@@ -54,33 +60,149 @@ jobs:
       - name: Install Playwright browsers
         run: python -m playwright install --with-deps chromium
 
-      - name: Prepare report folder
-        run: mkdir -p reports
+      - name: Prepare report folders
+        run: mkdir -p reports/allure reports/excel
 
+      # Flow: API (Postman) → UI (Playwright) → Excel + artifacts → Slack
       # Manual run: set workflow input base_url. Otherwise: repo variable QA_BASE_URL, else example.com
-      - name: Run pytest (UI / integration)
-        env:
-          BASE_URL: ${{ github.event.inputs && github.event.inputs.base_url != '' && github.event.inputs.base_url || vars.QA_BASE_URL || 'https://example.com' }}
-        run: |
-          python -m pytest tests/ -v --tb=short --junitxml=reports/junit-pytest.xml
-
       - name: Run Postman collection (Newman)
-        if: ${{ hashFiles('postman/collection.json') != '' }}
+        if: ${{ hashFiles('tests/api/postman/collection.json') != '' }}
         env:
           BASE_URL: ${{ github.event.inputs && github.event.inputs.base_url != '' && github.event.inputs.base_url || vars.QA_BASE_URL || 'https://example.com' }}
         run: |
-          npx --yes newman run postman/collection.json \
-            --reporters cli,junit \
+          newman run tests/api/postman/collection.json \
+            -e tests/api/postman/qa.postman_environment.json \
+            -r cli,junit,json \
             --reporter-junit-export reports/junit-newman.xml \
+            --reporter-json-export reports/api.json \
             --env-var "baseUrl=$BASE_URL"
+
+      - name: Run pytest (Playwright web — excludes @appium)
+        env:
+          BASE_URL: ${{ github.event.inputs && github.event.inputs.base_url != '' && github.event.inputs.base_url || vars.QA_BASE_URL || 'https://example.com' }}
+        run: |
+          python -m pytest tests/ -v --tb=short -m "not appium" \
+            --junitxml=reports/junit-pytest.xml \
+            --alluredir=reports/allure
+
+      - name: Generate Excel report
+        if: always()
+        run: python -m utils.excel_report
 
       - name: Upload test reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: qa-reports-${{ github.run_id }}
+          name: QA-Reports
+          path: reports/
+          if-no-files-found: ignore
+
+      - name: Notify Slack
+        if: always()
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          JOB_CONCLUSION: ${{ job.conclusion }}
+        run: |
+          python3 << 'EOF'
+          import json
+          import os
+          import urllib.error
+          import urllib.request
+
+          url = (os.environ.get("SLACK_WEBHOOK_URL") or "").strip()
+          if not url:
+              print("SLACK_WEBHOOK_URL secret not set; skipping Slack notify.")
+              raise SystemExit(0)
+
+          conclusion = os.environ.get("JOB_CONCLUSION", "unknown")
+          emoji = "✅" if conclusion == "success" else "❌"
+          repo = os.environ.get("GITHUB_REPOSITORY", "")
+          run_id = os.environ.get("GITHUB_RUN_ID", "")
+          server = os.environ.get("GITHUB_SERVER_URL", "https://github.com").rstrip("/")
+          link = f"{server}/{repo}/actions/runs/{run_id}"
+          text = f"{emoji} QA Pipeline ({repo}) — job **{conclusion}**\n<{link}|View run>"
+          body = json.dumps({"text": text}).encode("utf-8")
+          req = urllib.request.Request(
+              url,
+              data=body,
+              headers={"Content-Type": "application/json"},
+              method="POST",
+          )
+          try:
+              with urllib.request.urlopen(req, timeout=30) as resp:
+                  print("Slack notify HTTP", resp.status)
+          except urllib.error.URLError as e:
+              print("Slack notify failed (non-blocking):", e)
+          EOF
+
+  appium-android:
+    name: Mobile (Appium Android)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: |
+            requirements-appium.txt
+            pytest.ini
+            appium_config.py
+
+      - name: Setup Node (Appium 2)
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install Python dependencies (Appium only)
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-appium.txt
+
+      - name: Appium smoke on Android emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 29
+          arch: x86_64
+          target: google_apis
+          disable-animations: true
+          script: |
+            set -e
+            mkdir -p reports/allure reports/excel
+            trap 'cp /tmp/appium.log reports/appium-server.log 2>/dev/null || true' EXIT
+            npm install -g appium@2
+            appium driver install uiautomator2
+            appium --port 4723 --base-path / > /tmp/appium.log 2>&1 &
+            echo "Waiting for Appium /status..."
+            i=0
+            until curl -sf http://127.0.0.1:4723/status >/dev/null; do
+              i=$((i + 1))
+              if [ "$i" -ge 45 ]; then
+                echo "Appium did not become ready in time. Log:"
+                cat /tmp/appium.log || true
+                exit 1
+              fi
+              sleep 2
+            done
+            adb devices
+            python -m pytest tests/ui/appium/ -v --tb=short -m appium \
+              --junitxml=reports/junit-appium.xml \
+              --alluredir=reports/allure
+        env:
+          APPIUM_SERVER_URL: http://127.0.0.1:4723
+
+      - name: Upload Appium reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qa-appium-reports-${{ github.run_id }}
           path: |
             reports/
           if-no-files-found: ignore
-
-      # Optional: add steps here for Allure, Excel, Jira, Slack (secrets required)

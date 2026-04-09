@@ -9,6 +9,10 @@ __pycache__/
 .vscode/
 *.log
 reports/*.xml
-!reports/.gitkeep
+reports/api.json
+reports/allure/**
+!reports/allure/.gitkeep
+reports/excel/*
+!reports/excel/.gitkeep
 allure-results/
 allure-report/

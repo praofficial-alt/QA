@@ -1,0 +1,5 @@
+# Mobile CI / local Appium only (no Playwright).
+# Use Python 3.12 if pip cannot install Appium-Python-Client on 3.13 (wheel/build issues).
+pytest==8.3.4
+Appium-Python-Client==3.2.1
+allure-pytest>=2.13,<3
