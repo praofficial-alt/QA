@@ -91,10 +91,12 @@ jobs:
             --junitxml=reports/junit-pytest.xml \
             --alluredir=reports/allure
 
+      # Skips all @business_standard tests unless vars.RUN_BUSINESS_STANDARD_CI == '1' (see tests/conftest.py).
       - name: Business Standard — smoke (API + Playwright)
         env:
           BASE_URL: https://www.business-standard.com
           CI: "true"
+          RUN_BUSINESS_STANDARD_CI: ${{ vars.RUN_BUSINESS_STANDARD_CI }}
         run: |
           python -m pytest tests/ -v --tb=short \
             -m "business_standard and smoke and not appium" \
@@ -106,6 +108,7 @@ jobs:
         env:
           BASE_URL: https://www.business-standard.com
           CI: "true"
+          RUN_BUSINESS_STANDARD_CI: ${{ vars.RUN_BUSINESS_STANDARD_CI }}
         run: |
           python -m pytest tests/ -v --tb=short \
             -m "business_standard and regression and not appium" \
