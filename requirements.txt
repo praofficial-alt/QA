@@ -1,4 +1,5 @@
 pytest==8.3.4
+pytest-rerunfailures>=14,<17
 pytest-playwright==0.6.2
 playwright==1.49.1
 requests>=2.31,<3

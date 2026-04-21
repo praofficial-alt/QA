@@ -13,6 +13,16 @@ from playwright.sync_api import sync_playwright
 
 from utils.config import get_base_url
 
+# Browser-like headers reduce HTTP 403 from CDNs when using the Playwright request API.
+_BS_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+    ),
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9",
+}
+
 
 def _require_bs_host() -> str:
     base = get_base_url().rstrip("/")
@@ -26,7 +36,7 @@ def _require_bs_host() -> str:
 def test_bs_api_home_returns_200() -> None:
     base = _require_bs_host()
     with sync_playwright() as p:
-        ctx = p.request.new_context()
+        ctx = p.request.new_context(extra_http_headers=_BS_HEADERS)
         try:
             resp = ctx.get(base + "/", timeout=60_000)
             try:
@@ -43,7 +53,7 @@ def test_bs_api_markets_path_returns_200() -> None:
     base = _require_bs_host()
     url = urljoin(base + "/", "markets")
     with sync_playwright() as p:
-        ctx = p.request.new_context()
+        ctx = p.request.new_context(extra_http_headers=_BS_HEADERS)
         try:
             resp = ctx.get(url, timeout=60_000)
             try:

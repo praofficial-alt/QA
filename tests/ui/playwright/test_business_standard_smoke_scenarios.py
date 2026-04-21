@@ -9,24 +9,12 @@ from __future__ import annotations
 import re
 
 import pytest
-import requests
 
 from utils.bs_playwright import (
     click_story_and_resolve_article_page,
     goto_bs_home,
     try_dismiss_consent_banners,
 )
-from utils.config import get_base_url
-
-# Plain ``requests`` often gets 403 from this host without browser-like headers.
-_BS_REQUEST_HEADERS = {
-    "User-Agent": (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-        "(KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
-    ),
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-    "Accept-Language": "en-US,en;q=0.9",
-}
 
 
 @pytest.mark.business_standard
@@ -61,7 +49,7 @@ def test_open_article(page, bs_base_url: str) -> None:
     goto_bs_home(page, bs_base_url)
     story = page.locator("article a").first
     story.wait_for(state="visible", timeout=20_000)
-    article_page = click_story_and_resolve_article_page(page, story)
+    article_page = click_story_and_resolve_article_page(page, story, timeout_s=90.0)
     assert article_page.locator("h1").first.is_visible(timeout=20_000)
 
 
@@ -81,15 +69,3 @@ def test_search(page, bs_base_url: str) -> None:
     box.press("Enter")
     page.wait_for_load_state("domcontentloaded", timeout=45_000)
     assert "search" in page.url.lower(), f"Expected search in URL, got {page.url!r}"
-
-
-@pytest.mark.business_standard
-@pytest.mark.smoke
-def test_api_health() -> None:
-    """Home URL responds HTTP 200 (backend reachable; no hard downtime)."""
-    base = get_base_url().rstrip("/")
-    if "business-standard.com" not in base.lower():
-        pytest.skip("Set BASE_URL to business-standard.com for this smoke suite")
-    url = base + "/"
-    response = requests.get(url, headers=_BS_REQUEST_HEADERS, timeout=45)
-    assert response.status_code == 200, f"GET {url!r} returned {response.status_code}"

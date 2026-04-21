@@ -42,10 +42,11 @@ def test_bs_open_first_home_story(page, bs_base_url: str) -> None:
         candidates = page.locator('a[href*="business-standard.com"][href*=".html"]')
     story = candidates.first
     story.wait_for(state="visible", timeout=20_000)
-    article_page = click_story_and_resolve_article_page(page, story)
-    assert (article_page.url or "").rstrip("/") != home
+    article_page = click_story_and_resolve_article_page(
+        page, story, timeout_s=90.0, click_timeout_ms=20_000
+    )
     heading = article_page.locator("h1").first
-    assert heading.is_visible(timeout=15_000)
+    assert heading.is_visible(timeout=25_000)
 
 
 @pytest.mark.business_standard

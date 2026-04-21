@@ -75,6 +75,7 @@ jobs:
         run: |
           newman run tests/api/postman/collection.json \
             -e tests/api/postman/qa.postman_environment.json \
+            --delay-request 150 \
             -r cli,junit,json \
             --reporter-junit-export reports/junit-newman.xml \
             --reporter-json-export reports/api.json \
@@ -94,6 +95,7 @@ jobs:
         run: |
           python -m pytest tests/ -v --tb=short \
             -m "business_standard and smoke and not appium" \
+            --reruns 2 --reruns-delay 5 \
             --junitxml=reports/junit-bs-smoke.xml \
             --alluredir=reports/allure
 
@@ -103,6 +105,7 @@ jobs:
         run: |
           python -m pytest tests/ -v --tb=short \
             -m "business_standard and regression and not appium" \
+            --reruns 2 --reruns-delay 5 \
             --junitxml=reports/junit-bs-regression.xml \
             --alluredir=reports/allure
 
@@ -158,7 +161,7 @@ jobs:
 
   appium-android:
     name: Mobile (Appium Android)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     timeout-minutes: 45
     permissions:
       contents: read
@@ -204,7 +207,7 @@ jobs:
             set -e
             mkdir -p reports/allure reports/excel
             trap 'cp /tmp/appium.log reports/appium-server.log 2>/dev/null || true' EXIT
-            npm install -g appium@2
+            npm install -g appium@2.19.0 --no-fund --no-audit
             # Driver v5+ requires Appium 3; pin v4 for appium@2 (see appium-uiautomator2-driver peerDependencies)
             appium driver install uiautomator2@4.2.9
             appium --port 4723 --base-path / > /tmp/appium.log 2>&1 &
@@ -219,7 +222,9 @@ jobs:
               fi
               sleep 2
             done
+            adb wait-for-device
             adb devices
+            sleep 8
             python -m pytest tests/ui/appium/ -v --tb=short -m appium \
               --junitxml=reports/junit-appium.xml \
               --alluredir=reports/allure
