@@ -72,7 +72,8 @@ python -m playwright install --with-deps chromium
 
 # Appium (Node) — for local server; CI installs inside the Android job
 npm install -g appium@2
-appium driver install uiautomator2
+# Pin driver 4.x: latest uiautomator2 driver requires Appium 3 (^3.0.0-rc.2)
+appium driver install uiautomator2@4.2.9
 
 # Postman CLI
 npm install -g newman

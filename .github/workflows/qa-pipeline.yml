@@ -81,8 +81,26 @@ jobs:
         env:
           BASE_URL: ${{ github.event.inputs && github.event.inputs.base_url != '' && github.event.inputs.base_url || vars.QA_BASE_URL || 'https://example.com' }}
         run: |
-          python -m pytest tests/ -v --tb=short -m "not appium" \
+          python -m pytest tests/ -v --tb=short -m "not appium and not business_standard" \
             --junitxml=reports/junit-pytest.xml \
+            --alluredir=reports/allure
+
+      - name: Business Standard — smoke (API + Playwright)
+        env:
+          BASE_URL: https://www.business-standard.com
+        run: |
+          python -m pytest tests/ -v --tb=short \
+            -m "business_standard and smoke and not appium" \
+            --junitxml=reports/junit-bs-smoke.xml \
+            --alluredir=reports/allure
+
+      - name: Business Standard — regression (API + Playwright)
+        env:
+          BASE_URL: https://www.business-standard.com
+        run: |
+          python -m pytest tests/ -v --tb=short \
+            -m "business_standard and regression and not appium" \
+            --junitxml=reports/junit-bs-regression.xml \
             --alluredir=reports/allure
 
       - name: Generate Excel report
@@ -178,7 +196,8 @@ jobs:
             mkdir -p reports/allure reports/excel
             trap 'cp /tmp/appium.log reports/appium-server.log 2>/dev/null || true' EXIT
             npm install -g appium@2
-            appium driver install uiautomator2
+            # Driver v5+ requires Appium 3; pin v4 for appium@2 (see appium-uiautomator2-driver peerDependencies)
+            appium driver install uiautomator2@4.2.9
             appium --port 4723 --base-path / > /tmp/appium.log 2>&1 &
             echo "Waiting for Appium /status..."
             i=0
