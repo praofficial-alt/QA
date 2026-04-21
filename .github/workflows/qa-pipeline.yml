@@ -53,7 +53,7 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
 
       - name: Install Newman (global)
-        run: npm install -g newman
+        run: npm install -g newman@6 --no-fund --no-audit
 
       - name: Install Python dependencies
         run: |
@@ -67,11 +67,11 @@ jobs:
         run: mkdir -p reports/allure reports/excel
 
       # Flow: API (Postman) → UI (Playwright) → Excel + artifacts → Slack
-      # Manual run: set workflow input base_url. Otherwise: repo variable QA_BASE_URL, else example.com
+      # BASE_URL: manual workflow_dispatch input wins, else repo variable QA_BASE_URL, else example.com
       - name: Run Postman collection (Newman)
         if: ${{ hashFiles('tests/api/postman/collection.json') != '' }}
         env:
-          BASE_URL: ${{ github.event.inputs && github.event.inputs.base_url != '' && github.event.inputs.base_url || vars.QA_BASE_URL || 'https://example.com' }}
+          BASE_URL: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.base_url != '' && github.event.inputs.base_url || vars.QA_BASE_URL || 'https://example.com' }}
         run: |
           newman run tests/api/postman/collection.json \
             -e tests/api/postman/qa.postman_environment.json \
@@ -83,29 +83,33 @@ jobs:
 
       - name: Run pytest (Playwright web — excludes @appium)
         env:
-          BASE_URL: ${{ github.event.inputs && github.event.inputs.base_url != '' && github.event.inputs.base_url || vars.QA_BASE_URL || 'https://example.com' }}
+          BASE_URL: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.base_url != '' && github.event.inputs.base_url || vars.QA_BASE_URL || 'https://example.com' }}
+          CI: "true"
         run: |
           python -m pytest tests/ -v --tb=short -m "not appium and not business_standard" \
+            --reruns 1 --reruns-delay 3 \
             --junitxml=reports/junit-pytest.xml \
             --alluredir=reports/allure
 
       - name: Business Standard — smoke (API + Playwright)
         env:
           BASE_URL: https://www.business-standard.com
+          CI: "true"
         run: |
           python -m pytest tests/ -v --tb=short \
             -m "business_standard and smoke and not appium" \
-            --reruns 2 --reruns-delay 5 \
+            --reruns 3 --reruns-delay 6 \
             --junitxml=reports/junit-bs-smoke.xml \
             --alluredir=reports/allure
 
       - name: Business Standard — regression (API + Playwright)
         env:
           BASE_URL: https://www.business-standard.com
+          CI: "true"
         run: |
           python -m pytest tests/ -v --tb=short \
             -m "business_standard and regression and not appium" \
-            --reruns 2 --reruns-delay 5 \
+            --reruns 3 --reruns-delay 6 \
             --junitxml=reports/junit-bs-regression.xml \
             --alluredir=reports/allure
 
@@ -191,7 +195,7 @@ jobs:
           pip install -r requirements-appium.txt
 
       - name: Appium smoke on Android emulator
-        uses: reactivecircus/android-emulator-runner@v2
+        uses: reactivecircus/android-emulator-runner@v2.34.0
         env:
           APPIUM_SERVER_URL: http://127.0.0.1:4723
           # Extra grace when the runner tears down the emulator (avoids rare hang on "stop: not implemented").

@@ -22,6 +22,9 @@ def android_settings_options() -> "UiAutomator2Options":
     options.set_capability("appium:appActivity", ".Settings")
     options.set_capability("appium:noReset", True)
     options.set_capability("appium:autoGrantPermissions", True)
+    options.set_capability("appium:uiautomator2ServerInstallTimeout", 120_000)
+    options.set_capability("appium:uiautomator2ServerLaunchTimeout", 120_000)
+    options.set_capability("appium:newCommandTimeout", 120)
     return options
 
 

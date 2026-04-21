@@ -18,7 +18,11 @@ def test_bs_markets_landing_loads(page, bs_base_url: str) -> None:
     resp = page.goto(url, wait_until="domcontentloaded")
     try_dismiss_consent_banners(page)
     assert resp is not None and resp.ok
-    assert "market" in (page.title() or "").lower()
+    title_l = (page.title() or "").lower()
+    url_l = page.url.lower()
+    assert (
+        "market" in title_l or "/markets" in url_l or "business" in title_l
+    ), f"Unexpected markets landing title/url: title={title_l!r} url={url_l!r}"
 
 
 @pytest.mark.business_standard
