@@ -4,7 +4,8 @@ CI / local aggregation::
 
     python -m utils.excel_report
 
-Reads ``reports/junit-pytest.xml`` and ``reports/junit-newman.xml`` when present,
+Reads ``reports/junit-pytest.xml``, ``reports/junit-bs-smoke.xml``,
+``reports/junit-bs-regression.xml``, and ``reports/junit-newman.xml`` when present,
 then writes ``reports/excel/execution_report.xlsx``.
 """
 
@@ -105,6 +106,8 @@ def build_execution_rows() -> list[dict[str, Any]]:
     rep = project_root() / "reports"
     rows: list[dict[str, Any]] = []
     rows.extend(rows_from_junit(rep / "junit-pytest.xml", "pytest"))
+    rows.extend(rows_from_junit(rep / "junit-bs-smoke.xml", "pytest-bs-smoke"))
+    rows.extend(rows_from_junit(rep / "junit-bs-regression.xml", "pytest-bs-regression"))
     rows.extend(rows_from_junit(rep / "junit-newman.xml", "newman"))
     rows.extend(rows_from_junit(rep / "junit-appium.xml", "appium"))
     if not rows:

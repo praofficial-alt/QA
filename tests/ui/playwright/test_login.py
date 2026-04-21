@@ -34,6 +34,7 @@ def _login_env() -> dict[str, str]:
     }
 
 
+@pytest.mark.regression
 @pytest.mark.skipif(
     not _LOGIN_ON,
     reason="Optional login E2E: set E2E_LOGIN_ENABLED=1, E2E_USERNAME, E2E_PASSWORD (see README).",

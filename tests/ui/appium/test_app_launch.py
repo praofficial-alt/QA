@@ -56,6 +56,7 @@ def driver_apk():
 
 
 @pytest.mark.appium
+@pytest.mark.regression
 def test_app_launch(driver_apk) -> None:
     assert driver_apk.session_id
     size = driver_apk.get_window_size()
