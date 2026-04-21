@@ -29,6 +29,9 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    env:
+      # Live sites (Business Standard) are slow; Playwright default 60s can flake in CI.
+      PLAYWRIGHT_TIMEOUT_MS: "90000"
 
     steps:
       - name: Checkout
@@ -186,11 +189,17 @@ jobs:
 
       - name: Appium smoke on Android emulator
         uses: reactivecircus/android-emulator-runner@v2
+        env:
+          APPIUM_SERVER_URL: http://127.0.0.1:4723
+          # Extra grace when the runner tears down the emulator (avoids rare hang on "stop: not implemented").
+          ANDROID_EMULATOR_WAIT_TIME_BEFORE_KILL: "60"
         with:
-          api-level: 29
+          # API 29 images are flaky on current ubuntu-latest; 33+ is more reliable for CI.
+          api-level: 33
           arch: x86_64
           target: google_apis
           disable-animations: true
+          emulator-boot-timeout: 900
           script: |
             set -e
             mkdir -p reports/allure reports/excel
@@ -203,7 +212,7 @@ jobs:
             i=0
             until curl -sf http://127.0.0.1:4723/status >/dev/null; do
               i=$((i + 1))
-              if [ "$i" -ge 45 ]; then
+              if [ "$i" -ge 60 ]; then
                 echo "Appium did not become ready in time. Log:"
                 cat /tmp/appium.log || true
                 exit 1
@@ -214,8 +223,6 @@ jobs:
             python -m pytest tests/ui/appium/ -v --tb=short -m appium \
               --junitxml=reports/junit-appium.xml \
               --alluredir=reports/allure
-        env:
-          APPIUM_SERVER_URL: http://127.0.0.1:4723
 
       - name: Upload Appium reports
         if: always()
