@@ -4,8 +4,8 @@
 name: QA Pipeline
 
 on:
+  # Push: all branches (omit branch filter). PRs: only when merging into main/master.
   push:
-    branches: [main, master]
   pull_request:
     branches: [main, master]
   workflow_dispatch:
